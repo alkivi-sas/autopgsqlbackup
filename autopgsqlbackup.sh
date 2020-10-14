@@ -139,6 +139,17 @@ if [ "x$COMP" == "x" ]; then
   COMP=gzip
 fi
 
+# Choose max retention
+if [ "x$MAX_DAILY" == "x" ]; then
+  MAX_DAILY=7
+fi
+if [ "x$MAX_WEEKLY" == "x" ]; then
+  MAX_WEEKLY=5
+fi
+if [ "x$MAX_MONTHLY" == "x" ]; then
+  MAX_MONTHLY=3
+fi
+
 # Command to run before backups (uncomment to use)
 #PREBACKUP="/etc/pgsql-backup-pre"
 
@@ -432,15 +443,6 @@ echo ======================================================================
   # Weekly Backup
   if [ $DNOW = $DOWEEKLY ]; then
     echo Weekly Backup of Database \( $DB \)
-    echo Rotating 5 weeks Backups...
-      if [ "$W" -le 05 ];then
-        REMW=`expr 48 + $W`
-      elif [ "$W" -lt 15 ];then
-        REMW=0`expr $W - 5`
-      else
-        REMW=`expr $W - 5`
-      fi
-    eval rm -fv "$BACKUPDIR/weekly/$DB/week.$REMW.*"
     echo
       dbdump "$DB" "$BACKUPDIR/weekly/$DB/${DB}_week.$W.$DATE.sql"
       compression "$BACKUPDIR/weekly/$DB/${DB}_week.$W.$DATE.sql"
@@ -450,14 +452,24 @@ echo ======================================================================
   # Daily Backup
   else
     echo Daily Backup of Database \( $DB \)
-    echo Rotating last weeks Backup...
-    eval rm -fv "$BACKUPDIR/daily/$DB/*.$DOW.sql.*"
     echo
       dbdump "$DB" "$BACKUPDIR/daily/$DB/${DB}_$DATE.$DOW.sql"
       compression "$BACKUPDIR/daily/$DB/${DB}_$DATE.$DOW.sql"
       BACKUPFILES="$BACKUPFILES $BACKUPDIR/daily/$DB/${DB}_$DATE.$DOW.sql$SUFFIX"
     echo ----------------------------------------------------------------------
   fi
+  # Cleanup
+  echo Keeping only $MAX_MONTHLY months Backups...
+  MTIME_TO_DEL=`expr 30 + 31 \* $MAX_MONTHLY`
+  find "$BACKUPDIR/monthly/$DB/" -mtime +$MTIME_TO_DEL -exec rm -vf {} \;
+
+  echo Keeping only $MAX_WEEKLY weeks Backups...
+  MTIME_TO_DEL=`expr 7 + 7 \* $MAX_WEEKLY`
+  find "$BACKUPDIR/weekly/$DB/" -mtime +$MTIME_TO_DEL -exec rm -vf {} \;
+
+  echo Keeping only $MAX_DAILY daily Backups...
+  MTIME_TO_DEL=`expr 1 + $MAX_DAILY`
+  find "$BACKUPDIR/daily/$DB/" -mtime +$MTIME_TO_DEL -exec rm -vf {} \;
   done
 echo Backup End `date`
 echo ======================================================================
@@ -487,6 +499,9 @@ echo ======================================================================
       else
         REMW=`expr $W - 5`
       fi
+    echo Rotating $MAX_WEEKLY weeks Backups...
+    MTIME_TO_DEL = `expr 7 \* $MAX_WEEKLY`
+    eval find "$BACKUPDIR/weekly/$DB/" -mtime +$MTIME_TO_DEL -exec rm -vf {}\;
     eval rm -fv "$BACKUPDIR/weekly/week.$REMW.*"
     echo
       dbdump "$DBNAMES" "$BACKUPDIR/weekly/week.$W.$DATE.sql"
